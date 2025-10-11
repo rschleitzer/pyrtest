@@ -169,18 +169,31 @@ class TestForwardChaining:
         })
 
         bundle = assertions.assert_bundle(response, "Patient")
-        # Should find Alice Brown (whose GP is Dr. Smith)
-        assert bundle['total'] >= 1
+        # Should find exactly 1 patient: Alice Brown (whose GP is Dr. Smith)
+        assert bundle['total'] == 1, f"Expected 1 patient with GP family name 'Smith', got {bundle['total']}"
 
-        # Verify Alice Brown is in results
-        found_alice = False
+        # Verify Alice Brown is in results and others are NOT
+        found_patients = []
         for entry in bundle.get('entry', []):
             patient = entry['resource']
+            patient_id = patient['id']
             names = patient.get('name', [])
             for name in names:
-                if name.get('family') == 'Brown' and 'Alice' in name.get('given', []):
-                    found_alice = True
-        assert found_alice, "Should find Alice Brown whose GP is Dr. Smith"
+                family = name.get('family', '')
+                given = name.get('given', [])
+                found_patients.append((patient_id, family, given))
+
+        # Alice Brown should be found
+        alice_found = any(p[1] == 'Brown' and 'Alice' in p[2] for p in found_patients)
+        assert alice_found, "Should find Alice Brown whose GP is Dr. Smith"
+
+        # Bob Williams should NOT be found (his GP is Dr. Johnson)
+        bob_found = any(p[1] == 'Williams' and 'Bob' in p[2] for p in found_patients)
+        assert not bob_found, "Should NOT find Bob Williams whose GP is Dr. Johnson"
+
+        # Charlie Davis should NOT be found (has no GP)
+        charlie_found = any(p[1] == 'Davis' and 'Charlie' in p[2] for p in found_patients)
+        assert not charlie_found, "Should NOT find Charlie Davis who has no GP"
 
     def test_chain_patient_to_practitioner_by_identifier(self, client, assertions, test_data):
         """Test chaining using practitioner identifier."""
@@ -189,18 +202,31 @@ class TestForwardChaining:
         })
 
         bundle = assertions.assert_bundle(response, "Patient")
-        # Should find Bob Williams (whose GP is PRAC-002)
-        assert bundle['total'] >= 1
+        # Should find exactly 1 patient: Bob Williams (whose GP is PRAC-002)
+        assert bundle['total'] == 1, f"Expected 1 patient with GP identifier 'PRAC-002', got {bundle['total']}"
 
-        # Verify Bob Williams is in results
-        found_bob = False
+        # Verify Bob Williams is in results and others are NOT
+        found_patients = []
         for entry in bundle.get('entry', []):
             patient = entry['resource']
+            patient_id = patient['id']
             names = patient.get('name', [])
             for name in names:
-                if name.get('family') == 'Williams' and 'Bob' in name.get('given', []):
-                    found_bob = True
-        assert found_bob, "Should find Bob Williams whose GP is PRAC-002"
+                family = name.get('family', '')
+                given = name.get('given', [])
+                found_patients.append((patient_id, family, given))
+
+        # Bob Williams should be found
+        bob_found = any(p[1] == 'Williams' and 'Bob' in p[2] for p in found_patients)
+        assert bob_found, "Should find Bob Williams whose GP is PRAC-002"
+
+        # Alice Brown should NOT be found (her GP is PRAC-001)
+        alice_found = any(p[1] == 'Brown' and 'Alice' in p[2] for p in found_patients)
+        assert not alice_found, "Should NOT find Alice Brown whose GP is PRAC-001"
+
+        # Charlie Davis should NOT be found (has no GP)
+        charlie_found = any(p[1] == 'Davis' and 'Charlie' in p[2] for p in found_patients)
+        assert not charlie_found, "Should NOT find Charlie Davis who has no GP"
 
     def test_chain_observation_to_patient_by_name(self, client, assertions, test_data):
         """Test chaining from Observation to Patient by name."""
@@ -210,14 +236,29 @@ class TestForwardChaining:
         })
 
         bundle = assertions.assert_bundle(response, "Observation")
-        # Should find observations for Alice Brown (2 observations)
-        assert bundle['total'] >= 2
+        # Should find exactly 2 observations for Alice Brown (heart rate and temperature)
+        assert bundle['total'] == 2, f"Expected 2 observations for patient 'Brown', got {bundle['total']}"
 
-        # Verify all observations are for patients named Brown
+        # Verify all observations are for Alice Brown's patient ID
+        alice_patient_id = test_data['patients'][0]['id']  # Alice Brown
+        bob_patient_id = test_data['patients'][1]['id']    # Bob Williams
+
+        found_patient_ids = []
         for entry in bundle.get('entry', []):
             obs = entry['resource']
             subject_ref = obs.get('subject', {}).get('reference', '')
-            assert 'Patient/' in subject_ref
+            assert 'Patient/' in subject_ref, "Subject reference should be a Patient"
+            # Extract patient ID from reference
+            patient_id = subject_ref.split('Patient/')[1] if 'Patient/' in subject_ref else None
+            found_patient_ids.append(patient_id)
+
+        # All observations should be for Alice Brown
+        assert all(pid == alice_patient_id for pid in found_patient_ids), \
+            "All observations should be for Alice Brown only"
+
+        # Bob Williams' observation should NOT be found
+        assert bob_patient_id not in found_patient_ids, \
+            "Should NOT find Bob Williams' observations (patient name is Williams, not Brown)"
 
     def test_chain_observation_to_patient_by_gender(self, client, assertions, test_data):
         """Test chaining with gender parameter."""
@@ -236,35 +277,56 @@ class TestReverseChaining:
 
     def test_reverse_chain_patient_has_observation(self, client, assertions, test_data):
         """Test finding patients who have observations."""
-        # Find patients that have observations
+        # Find patients that have observations with code 8867-4 (heart rate)
         response = client.search("Patient", {
             "_has:Observation:subject:code": "8867-4"  # Heart rate code
         })
 
         bundle = assertions.assert_bundle(response, "Patient")
-        # Should find Alice Brown who has a heart rate observation
-        assert bundle['total'] >= 1
+        # Should find exactly 1 patient: Alice Brown who has a heart rate observation
+        assert bundle['total'] == 1, f"Expected 1 patient with heart rate observation, got {bundle['total']}"
+
+        alice_patient_id = test_data['patients'][0]['id']  # Alice Brown
+        bob_patient_id = test_data['patients'][1]['id']    # Bob Williams
+        charlie_patient_id = test_data['patients'][2]['id']  # Charlie Davis
+
+        found_patient_ids = [entry['resource']['id'] for entry in bundle.get('entry', [])]
+
+        # Alice Brown should be found (has heart rate observation)
+        assert alice_patient_id in found_patient_ids, \
+            "Should find Alice Brown who has a heart rate observation"
+
+        # Bob Williams should NOT be found (has blood pressure, not heart rate)
+        assert bob_patient_id not in found_patient_ids, \
+            "Should NOT find Bob Williams who has blood pressure observation, not heart rate"
+
+        # Charlie Davis should NOT be found (has no observations)
+        assert charlie_patient_id not in found_patient_ids, \
+            "Should NOT find Charlie Davis who has no observations"
 
     def test_reverse_chain_practitioner_has_patient(self, client, assertions, test_data):
         """Test finding practitioners who have patients."""
-        # Find practitioners who are general practitioners for patients
+        # Find practitioners who are general practitioners for patients named "Brown"
         response = client.search("Practitioner", {
             "_has:Patient:general-practitioner:family": "Brown"
         })
 
         bundle = assertions.assert_bundle(response, "Practitioner")
-        # Should find Dr. Smith who is GP for Alice Brown
-        assert bundle['total'] >= 1
+        # Should find exactly 1 practitioner: Dr. Smith who is GP for Alice Brown
+        assert bundle['total'] == 1, f"Expected 1 practitioner with patient named Brown, got {bundle['total']}"
 
-        # Verify Dr. Smith is in results
-        found_smith = False
-        for entry in bundle.get('entry', []):
-            prac = entry['resource']
-            names = prac.get('name', [])
-            for name in names:
-                if name.get('family') == 'Smith':
-                    found_smith = True
-        assert found_smith, "Should find Dr. Smith who is GP for a patient named Brown"
+        smith_prac_id = test_data['practitioners'][0]['id']  # Dr. Smith
+        johnson_prac_id = test_data['practitioners'][1]['id']  # Dr. Johnson
+
+        found_prac_ids = [entry['resource']['id'] for entry in bundle.get('entry', [])]
+
+        # Dr. Smith should be found (is GP for Alice Brown)
+        assert smith_prac_id in found_prac_ids, \
+            "Should find Dr. Smith who is GP for Alice Brown"
+
+        # Dr. Johnson should NOT be found (is GP for Bob Williams, not Brown)
+        assert johnson_prac_id not in found_prac_ids, \
+            "Should NOT find Dr. Johnson who is GP for Bob Williams, not Brown"
 
 
 class TestMultipleLevelChaining:
@@ -272,15 +334,34 @@ class TestMultipleLevelChaining:
 
     def test_two_level_chain(self, client, assertions, test_data):
         """Test chaining through two levels of references."""
-        # Find observations for patients whose GP has a specific name
+        # Find observations for patients whose GP has family name "Smith"
         # This would be: Observation -> Patient -> Practitioner
         response = client.search("Observation", {
             "subject:Patient.general-practitioner.family": "Smith"
         })
 
         bundle = assertions.assert_bundle(response, "Observation")
-        # Should find observations for Alice Brown (whose GP is Dr. Smith)
-        assert bundle['total'] >= 2
+        # Should find exactly 2 observations for Alice Brown (whose GP is Dr. Smith)
+        assert bundle['total'] == 2, f"Expected 2 observations for patients with GP 'Smith', got {bundle['total']}"
+
+        alice_patient_id = test_data['patients'][0]['id']  # Alice Brown (GP is Dr. Smith)
+        bob_patient_id = test_data['patients'][1]['id']    # Bob Williams (GP is Dr. Johnson)
+
+        # Verify all observations are for Alice Brown only
+        found_patient_ids = []
+        for entry in bundle.get('entry', []):
+            obs = entry['resource']
+            subject_ref = obs.get('subject', {}).get('reference', '')
+            patient_id = subject_ref.split('Patient/')[1] if 'Patient/' in subject_ref else None
+            found_patient_ids.append(patient_id)
+
+        # All observations should be for Alice Brown (whose GP is Dr. Smith)
+        assert all(pid == alice_patient_id for pid in found_patient_ids), \
+            "All observations should be for Alice Brown whose GP is Dr. Smith"
+
+        # Bob Williams' observation should NOT be found (his GP is Dr. Johnson, not Smith)
+        assert bob_patient_id not in found_patient_ids, \
+            "Should NOT find Bob Williams' observations (his GP is Dr. Johnson, not Smith)"
 
 
 class TestChainingWithOtherParameters:
@@ -306,8 +387,22 @@ class TestChainingWithOtherParameters:
         })
 
         bundle = assertions.assert_bundle(response, "Observation")
-        # Should find only the heart rate observation for Alice Brown
-        assert bundle['total'] >= 1
+        # Should find exactly 1 observation: heart rate for Alice Brown
+        assert bundle['total'] == 1, f"Expected 1 heart rate observation for patients with GP 'Smith', got {bundle['total']}"
+
+        # Verify it's the heart rate observation
+        obs = bundle['entry'][0]['resource']
+        code = obs.get('code', {}).get('coding', [{}])[0].get('code', '')
+        assert code == '8867-4', "Should be the heart rate observation"
+
+        # Verify it's for Alice Brown
+        alice_patient_id = test_data['patients'][0]['id']
+        subject_ref = obs.get('subject', {}).get('reference', '')
+        patient_id = subject_ref.split('Patient/')[1] if 'Patient/' in subject_ref else None
+        assert patient_id == alice_patient_id, "Should be Alice Brown's observation"
+
+        # The temperature observation for Alice should NOT be found (different code)
+        # Bob's blood pressure observation should NOT be found (different GP)
 
     def test_chain_with_multiple_values(self, client, assertions, test_data):
         """Test chaining with OR logic on chained parameter."""
@@ -317,8 +412,26 @@ class TestChainingWithOtherParameters:
         })
 
         bundle = assertions.assert_bundle(response, "Patient")
-        # Should find both Alice (GP Smith) and Bob (GP Johnson)
-        assert bundle['total'] >= 2
+        # Should find exactly 2 patients: Alice (GP Smith) and Bob (GP Johnson)
+        assert bundle['total'] == 2, f"Expected 2 patients with GP 'Smith' or 'Johnson', got {bundle['total']}"
+
+        alice_patient_id = test_data['patients'][0]['id']  # Alice Brown
+        bob_patient_id = test_data['patients'][1]['id']    # Bob Williams
+        charlie_patient_id = test_data['patients'][2]['id']  # Charlie Davis
+
+        found_patient_ids = [entry['resource']['id'] for entry in bundle.get('entry', [])]
+
+        # Alice Brown should be found (GP is Dr. Smith)
+        assert alice_patient_id in found_patient_ids, \
+            "Should find Alice Brown whose GP is Dr. Smith"
+
+        # Bob Williams should be found (GP is Dr. Johnson)
+        assert bob_patient_id in found_patient_ids, \
+            "Should find Bob Williams whose GP is Dr. Johnson"
+
+        # Charlie Davis should NOT be found (has no GP)
+        assert charlie_patient_id not in found_patient_ids, \
+            "Should NOT find Charlie Davis who has no GP"
 
 
 class TestMultipleChainedParameters:
@@ -528,8 +641,20 @@ class TestChainingEdgeCases:
         })
 
         bundle = assertions.assert_bundle(response, "Patient")
-        # Should return empty results
-        assert bundle['total'] == 0
+        # Should return exactly 0 results (no GP with that name exists)
+        assert bundle['total'] == 0, f"Expected 0 patients with non-existent GP name, got {bundle['total']}"
+        assert len(bundle.get('entry', [])) == 0, "Entry list should be empty"
+
+        # Verify none of our test patients are in the results
+        alice_patient_id = test_data['patients'][0]['id']
+        bob_patient_id = test_data['patients'][1]['id']
+        charlie_patient_id = test_data['patients'][2]['id']
+
+        found_patient_ids = [entry['resource']['id'] for entry in bundle.get('entry', [])]
+
+        assert alice_patient_id not in found_patient_ids, "Should NOT find Alice Brown"
+        assert bob_patient_id not in found_patient_ids, "Should NOT find Bob Williams"
+        assert charlie_patient_id not in found_patient_ids, "Should NOT find Charlie Davis"
 
     def test_chain_with_invalid_resource_type(self, client, assertions, test_data):
         """Test chaining with explicit resource type that doesn't match."""
@@ -539,5 +664,44 @@ class TestChainingEdgeCases:
         })
 
         bundle = assertions.assert_bundle(response, "Patient")
-        # Should return no results as the reference type doesn't match
-        assert bundle['total'] == 0
+        # Should return exactly 0 results as the reference type doesn't match
+        assert bundle['total'] == 0, f"Expected 0 patients (wrong resource type), got {bundle['total']}"
+        assert len(bundle.get('entry', [])) == 0, "Entry list should be empty"
+
+        # Verify none of our test patients are in the results
+        alice_patient_id = test_data['patients'][0]['id']
+        bob_patient_id = test_data['patients'][1]['id']
+
+        found_patient_ids = [entry['resource']['id'] for entry in bundle.get('entry', [])]
+
+        # Even though Alice and Bob have GPs, they shouldn't be found because
+        # we're looking for Organization type references, not Practitioner
+        assert alice_patient_id not in found_patient_ids, \
+            "Should NOT find Alice Brown (GP is Practitioner, not Organization)"
+        assert bob_patient_id not in found_patient_ids, \
+            "Should NOT find Bob Williams (GP is Practitioner, not Organization)"
+
+    def test_chain_excludes_patients_without_reference(self, client, assertions, test_data):
+        """Test that chaining properly excludes patients without the reference field."""
+        # Search for any patient with a GP - Charlie Davis has no GP and should be excluded
+        response = client.search("Patient", {
+            "general-practitioner.family": "Smith,Johnson"
+        })
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        # Should find exactly 2 patients (Alice and Bob) but NOT Charlie
+        assert bundle['total'] == 2, f"Expected 2 patients with GPs, got {bundle['total']}"
+
+        alice_patient_id = test_data['patients'][0]['id']  # Alice Brown (has GP)
+        bob_patient_id = test_data['patients'][1]['id']    # Bob Williams (has GP)
+        charlie_patient_id = test_data['patients'][2]['id']  # Charlie Davis (NO GP)
+
+        found_patient_ids = [entry['resource']['id'] for entry in bundle.get('entry', [])]
+
+        # Alice and Bob should be found
+        assert alice_patient_id in found_patient_ids, "Should find Alice Brown who has a GP"
+        assert bob_patient_id in found_patient_ids, "Should find Bob Williams who has a GP"
+
+        # Charlie should NOT be found (has no generalPractitioner field)
+        assert charlie_patient_id not in found_patient_ids, \
+            "Should NOT find Charlie Davis who has no GP (missing generalPractitioner field)"

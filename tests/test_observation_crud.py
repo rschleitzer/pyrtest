@@ -1,5 +1,5 @@
 """Tests for FHIR Observation resource CRUD operations."""
-import pyrtest
+import pytest
 import sys
 import os
 
@@ -10,19 +10,19 @@ from utils.assertions import FHIRAssertions
 from fixtures.resource_generators import FHIRResourceGenerator
 
 
-@pyrtest.fixture
+@pytest.fixture
 def client():
     """Create FHIR client for tests."""
     return FHIRClient()
 
 
-@pyrtest.fixture
+@pytest.fixture
 def assertions():
     """Create assertions helper."""
     return FHIRAssertions()
 
 
-@pyrtest.fixture
+@pytest.fixture
 def test_patient(client, assertions):
     """Create a test patient for observations."""
     patient = FHIRResourceGenerator.generate_patient()
@@ -374,7 +374,7 @@ class TestObservationDelete:
 class TestObservationSearch:
     """Test Observation resource searching."""
 
-    @pyrtest.fixture
+    @pytest.fixture
     def test_observations(self, client, assertions, test_patient):
         """Create multiple test observations."""
         observations = []

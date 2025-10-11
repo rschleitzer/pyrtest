@@ -1,5 +1,5 @@
 """Pagination tests for FHIR search results."""
-import pyrtest
+import pytest
 import sys
 import os
 
@@ -10,19 +10,19 @@ from utils.assertions import FHIRAssertions
 from fixtures.resource_generators import FHIRResourceGenerator
 
 
-@pyrtest.fixture
+@pytest.fixture
 def client():
     """Create FHIR client for tests."""
     return FHIRClient()
 
 
-@pyrtest.fixture
+@pytest.fixture
 def assertions():
     """Create assertions helper."""
     return FHIRAssertions()
 
 
-@pyrtest.fixture
+@pytest.fixture
 def large_patient_set(client, assertions):
     """Create a large set of patients for pagination testing."""
     patients = []

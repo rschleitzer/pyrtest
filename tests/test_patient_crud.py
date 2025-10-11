@@ -1,5 +1,5 @@
 """Test suite for Patient CRUD operations."""
-import pyrtest
+import pytest
 import sys
 import os
 
@@ -11,13 +11,13 @@ from utils.assertions import FHIRAssertions
 from fixtures.resource_generators import FHIRResourceGenerator
 
 
-@pyrtest.fixture
+@pytest.fixture
 def client():
     """Create FHIR client for tests."""
     return FHIRClient()
 
 
-@pyrtest.fixture
+@pytest.fixture
 def assertions():
     """Create assertions helper."""
     return FHIRAssertions()

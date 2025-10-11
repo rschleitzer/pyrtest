@@ -1,5 +1,5 @@
 """Tests for FHIR server error handling and edge cases."""
-import pytest
+import pyrtest
 import sys
 import os
 import requests
@@ -11,13 +11,13 @@ from utils.assertions import FHIRAssertions
 from fixtures.resource_generators import FHIRResourceGenerator
 
 
-@pytest.fixture
+@pyrtest.fixture
 def client():
     """Create FHIR client for tests."""
     return FHIRClient()
 
 
-@pytest.fixture
+@pyrtest.fixture
 def assertions():
     """Create assertions helper."""
     return FHIRAssertions()

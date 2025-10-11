@@ -1,5 +1,5 @@
 """Tests for FHIR resource history and versioning."""
-import pytest
+import pyrtest
 import sys
 import os
 from datetime import datetime, timedelta, UTC
@@ -11,13 +11,13 @@ from utils.assertions import FHIRAssertions
 from fixtures.resource_generators import FHIRResourceGenerator
 
 
-@pytest.fixture
+@pyrtest.fixture
 def client():
     """Create FHIR client for tests."""
     return FHIRClient()
 
 
-@pytest.fixture
+@pyrtest.fixture
 def assertions():
     """Create assertions helper."""
     return FHIRAssertions()
@@ -26,7 +26,7 @@ def assertions():
 class TestResourceHistory:
     """Test resource history operations."""
 
-    @pytest.fixture
+    @pyrtest.fixture
     def patient_with_history(self, client, assertions):
         """Create a patient and update it multiple times to generate history."""
         # Create initial patient
@@ -145,7 +145,7 @@ class TestResourceHistory:
 class TestVersionReading:
     """Test reading specific versions of resources."""
 
-    @pytest.fixture
+    @pyrtest.fixture
     def versioned_patient(self, client, assertions):
         """Create a patient with multiple versions."""
         patient = FHIRResourceGenerator.generate_patient(

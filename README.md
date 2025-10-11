@@ -84,7 +84,7 @@ pyrtest/
 ├── LICENSE                       # MIT License
 ├── requirements.txt              # Python dependencies
 ├── conftest.py                   # pytest configuration and shared fixtures
-├── pytest.ini                    # pytest settings
+├── pyrtest.ini                    # pytest settings
 ├── .github/
 │   └── workflows/
 │       └── tests.yml            # GitHub Actions CI configuration
@@ -370,7 +370,7 @@ def test_search_by_family(client, assertions):
 
 ### pytest Configuration
 
-Edit `pytest.ini` to customize test behavior:
+Edit `pyrtest.ini` to customize test behavior:
 
 ```ini
 [pytest]

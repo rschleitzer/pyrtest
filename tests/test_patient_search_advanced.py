@@ -1,5 +1,5 @@
 """Advanced search parameter tests for FHIR Patient resource."""
-import pytest
+import pyrtest
 import sys
 import os
 
@@ -10,13 +10,13 @@ from utils.assertions import FHIRAssertions
 from fixtures.resource_generators import FHIRResourceGenerator
 
 
-@pytest.fixture
+@pyrtest.fixture
 def client():
     """Create FHIR client for tests."""
     return FHIRClient()
 
 
-@pytest.fixture
+@pyrtest.fixture
 def assertions():
     """Create assertions helper."""
     return FHIRAssertions()
@@ -25,7 +25,7 @@ def assertions():
 class TestReferenceSearch:
     """Test reference parameter searches."""
 
-    @pytest.fixture
+    @pyrtest.fixture
     def test_data(self, client, assertions):
         """Create test data with references."""
         data = {'practitioners': [], 'patients': []}
@@ -115,7 +115,7 @@ class TestReferenceSearch:
 class TestAdvancedModifiers:
     """Test advanced search parameter modifiers."""
 
-    @pytest.fixture
+    @pyrtest.fixture
     def test_patients(self, client, assertions):
         """Create test patients."""
         patients = []
@@ -242,7 +242,7 @@ class TestTextSearch:
 class TestCompositeSearch:
     """Test composite search parameters."""
 
-    @pytest.fixture
+    @pyrtest.fixture
     def test_observations(self, client, assertions):
         """Create test observations with various values."""
         observations = []
@@ -316,7 +316,7 @@ class TestCompositeSearch:
 class TestQuantitySearch:
     """Test quantity parameter searches."""
 
-    @pytest.fixture
+    @pyrtest.fixture
     def test_observations(self, client, assertions):
         """Create observations with various quantity values."""
         observations = []

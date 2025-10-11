@@ -1,5 +1,5 @@
 """Test suite for Patient search operations."""
-import pytest
+import pyrtest
 import sys
 import os
 from datetime import datetime, timedelta
@@ -11,19 +11,19 @@ from utils.assertions import FHIRAssertions
 from fixtures.resource_generators import FHIRResourceGenerator
 
 
-@pytest.fixture
+@pyrtest.fixture
 def client():
     """Create FHIR client for tests."""
     return FHIRClient()
 
 
-@pytest.fixture
+@pyrtest.fixture
 def assertions():
     """Create assertions helper."""
     return FHIRAssertions()
 
 
-@pytest.fixture
+@pyrtest.fixture
 def test_patients(client, assertions):
     """Create a set of test patients with known attributes."""
     patients = []

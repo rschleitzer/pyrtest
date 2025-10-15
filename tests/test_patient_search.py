@@ -307,9 +307,9 @@ class TestNamePrefixSuffix:
         """Create test patients with name prefixes and suffixes."""
         patients = []
 
-        # Patient 1: Prof. Albert Einstein
+        # Patient 1: Prof. Dr. Albert Einstein
         p1 = FHIRResourceGenerator.generate_patient(
-            name=[{"family": "Einstein", "given": ["Albert"], "prefix": ["Prof."]}],
+            name=[{"family": "Einstein", "given": ["Albert"], "prefix": ["Prof.", "Dr."]}],
             gender="male",
             birthDate="1879-03-14"
         )
@@ -334,9 +334,12 @@ class TestNamePrefixSuffix:
         resp = client.create(p3)
         patients.append(assertions.assert_created(resp, "Patient"))
 
-        # Patient 4: Pater Ansgar OSB (monk with religious name)
+        # Patient 4: Brother Ansgar OSB (monk with religious name and former name)
         p4 = FHIRResourceGenerator.generate_patient(
-            name=[{"family": "Ansgar", "given": ["Pater"], "suffix": ["OSB"]}],
+            name=[
+                {"use": "official", "given": ["Ansgar"], "prefix": ["Brother"], "suffix": ["OSB"]},
+                {"use": "old", "given": ["Herbert"], "family": "Müller"}
+            ],
             gender="male",
             birthDate="1960-06-01"
         )
@@ -452,19 +455,48 @@ class TestNamePrefixSuffix:
 
     def test_search_by_religious_suffix(self, client, assertions, prefix_suffix_patients):
         """Test searching for religious title suffix (OSB)."""
-        response = client.search("Patient", {"name": "Pater"})
+        response = client.search("Patient", {"name": "Ansgar"})
 
         bundle = assertions.assert_bundle(response, "Patient")
         assert bundle['total'] >= 1
 
-        # Verify we find the monk
+        # Verify we find the monk by religious name
         found = False
         for entry in bundle.get('entry', []):
             patient = entry['resource']
             for name in patient.get('name', []):
-                if "Pater" in name.get('given', []):
+                if "Ansgar" in name.get('given', []):
                     found = True
-        assert found, "Should find Pater Ansgar"
+        assert found, "Should find Brother Ansgar by religious name"
+
+    def test_search_by_former_name(self, client, assertions, prefix_suffix_patients):
+        """Test searching for person by their former/old name."""
+        response = client.search("Patient", {"name": "Herbert"})
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        # Verify we find the monk by former given name
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                if "Herbert" in name.get('given', []):
+                    found = True
+        assert found, "Should find Brother Ansgar by former name Herbert"
+
+        # Also test by former family name
+        response = client.search("Patient", {"name": "Müller"})
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                if name.get('family') == "Müller":
+                    found = True
+        assert found, "Should find Brother Ansgar by former family name Müller"
 
 
 class TestResultControl:

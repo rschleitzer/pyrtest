@@ -238,6 +238,59 @@ class TestSearchMultipleParameters:
         # Should find Jane Smith (female, active)
         assert bundle['total'] >= 1
 
+    def test_search_repeated_given_and_behavior(self, client, assertions):
+        """Test repeated given parameter with AND semantics.
+
+        According to FHIR spec, repeated parameters like ?given=Alice&given=Barbara
+        should match resources that have BOTH values (AND logic).
+        This is different from comma-separated values which use OR logic.
+        """
+        # Create a patient with multiple given names
+        patient_data = FHIRResourceGenerator.generate_patient(
+            name=[{"family": "TestMultipleGiven", "given": ["Alice", "Barbara"]}],
+            gender="female",
+            birthDate="1990-01-01",
+            identifier=[{"system": "http://hospital.org/mrn", "value": "TEST-MULTI-GIVEN"}]
+        )
+
+        resp = client.create(patient_data)
+        created_patient = assertions.assert_created(resp, "Patient")
+        patient_id = created_patient['id']
+
+        try:
+            # Test 1: Search for Alice only - should find the patient
+            response = client.search("Patient", {"given": "Alice"})
+            bundle = assertions.assert_bundle(response, "Patient")
+            ids = [e['resource']['id'] for e in bundle.get('entry', [])]
+            assert patient_id in ids, "Should find patient when searching for Alice"
+
+            # Test 2: Search for Barbara only - should find the patient
+            response = client.search("Patient", {"given": "Barbara"})
+            bundle = assertions.assert_bundle(response, "Patient")
+            ids = [e['resource']['id'] for e in bundle.get('entry', [])]
+            assert patient_id in ids, "Should find patient when searching for Barbara"
+
+            # Test 3: Search with repeated parameter ?given=Alice&given=Barbara
+            # Should find the patient (AND: patient has BOTH names)
+            response = client.search("Patient", {"given": ["Alice", "Barbara"]})
+            bundle = assertions.assert_bundle(response, "Patient")
+            ids = [e['resource']['id'] for e in bundle.get('entry', [])]
+            assert patient_id in ids, "Should find patient when searching for Alice AND Barbara"
+
+            # Test 4: Search for Alice AND a non-existent name
+            # Should NOT find the patient (patient doesn't have Carol)
+            response = client.search("Patient", {"given": ["Alice", "Carol"]})
+            bundle = assertions.assert_bundle(response, "Patient")
+            ids = [e['resource']['id'] for e in bundle.get('entry', [])]
+            assert patient_id not in ids, "Should NOT find patient when searching for Alice AND Carol"
+
+        finally:
+            # Cleanup
+            try:
+                client.delete("Patient", patient_id)
+            except:
+                pass  # Best effort cleanup
+
 
 class TestSearchMultipleValues:
     """Test search with multiple values for one parameter (OR logic)."""

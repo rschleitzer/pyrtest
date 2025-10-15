@@ -97,19 +97,110 @@ class TestReferenceSearch:
         bundle = assertions.assert_bundle(response, "Patient")
         # Should find the patient (server should be lenient)
 
-    def test_reference_missing_modifier(self, client, assertions):
+    @pytest.fixture
+    def missing_test_data(self, client, assertions):
+        """Create test data for :missing modifier tests."""
+        data = {'practitioners': [], 'patients_with_gp': [], 'patients_without_gp': []}
+
+        # Create practitioner
+        prac = FHIRResourceGenerator.generate_practitioner(
+            name=[{"family": "MissingTest", "given": ["Doctor"]}]
+        )
+        resp = client.create(prac)
+        created_prac = assertions.assert_created(resp, "Practitioner")
+        data['practitioners'].append(created_prac)
+
+        # Create patient WITH general practitioner
+        patient_with_gp = FHIRResourceGenerator.generate_patient(
+            name=[{"family": "HasGP", "given": ["Test"]}],
+            generalPractitioner=[
+                FHIRResourceGenerator.generate_reference(
+                    "Practitioner",
+                    created_prac['id'],
+                    "Dr. MissingTest"
+                )
+            ]
+        )
+        resp = client.create(patient_with_gp)
+        created_with_gp = assertions.assert_created(resp, "Patient")
+        data['patients_with_gp'].append(created_with_gp)
+
+        # Create patient WITHOUT general practitioner
+        patient_without_gp = FHIRResourceGenerator.generate_patient(
+            name=[{"family": "NoGP", "given": ["Test"]}]
+        )
+        resp = client.create(patient_without_gp)
+        created_without_gp = assertions.assert_created(resp, "Patient")
+        data['patients_without_gp'].append(created_without_gp)
+
+        yield data
+
+        # Cleanup
+        for patient in data['patients_with_gp'] + data['patients_without_gp']:
+            try:
+                client.delete("Patient", patient['id'])
+            except:
+                pass
+        for prac in data['practitioners']:
+            try:
+                client.delete("Practitioner", prac['id'])
+            except:
+                pass
+
+    def test_reference_missing_modifier(self, client, assertions, missing_test_data):
         """Test :missing modifier on reference."""
-        # Find patients without a general practitioner
+        patient_without_gp_id = missing_test_data['patients_without_gp'][0]['id']
+        patient_with_gp_id = missing_test_data['patients_with_gp'][0]['id']
+
+        # Test :missing=true - should find patient WITHOUT general practitioner
         response = client.search("Patient", {
             "general-practitioner:missing": "true"
         })
 
         bundle = assertions.assert_bundle(response, "Patient")
         # All results should not have generalPractitioner
+        found_without_gp = False
+        found_with_gp = False
         for entry in bundle.get('entry', []):
             patient = entry['resource']
+            # Verify no patients have generalPractitioner
             assert 'generalPractitioner' not in patient or \
-                   len(patient.get('generalPractitioner', [])) == 0
+                   len(patient.get('generalPractitioner', [])) == 0, \
+                   f"Patient {patient['id']} has generalPractitioner but should not"
+
+            # Track if we found our test patients
+            if patient['id'] == patient_without_gp_id:
+                found_without_gp = True
+            if patient['id'] == patient_with_gp_id:
+                found_with_gp = True
+
+        assert found_without_gp, "Should find patient without GP"
+        assert not found_with_gp, "Should not find patient with GP"
+
+        # Test :missing=false - should find patient WITH general practitioner
+        response = client.search("Patient", {
+            "general-practitioner:missing": "false"
+        })
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        # All results should have generalPractitioner
+        found_without_gp = False
+        found_with_gp = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            # Verify all patients have generalPractitioner
+            assert 'generalPractitioner' in patient and \
+                   len(patient.get('generalPractitioner', [])) > 0, \
+                   f"Patient {patient['id']} missing generalPractitioner but should have one"
+
+            # Track if we found our test patients
+            if patient['id'] == patient_without_gp_id:
+                found_without_gp = True
+            if patient['id'] == patient_with_gp_id:
+                found_with_gp = True
+
+        assert not found_without_gp, "Should not find patient without GP"
+        assert found_with_gp, "Should find patient with GP"
 
 
 class TestAdvancedModifiers:

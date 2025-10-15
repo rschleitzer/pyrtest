@@ -299,6 +299,174 @@ class TestSearchModifiers:
             assert 'active' not in patient, "Patient should not have active field"
 
 
+class TestNamePrefixSuffix:
+    """Test search for Patient name prefix and suffix."""
+
+    @pytest.fixture
+    def prefix_suffix_patients(self, client, assertions):
+        """Create test patients with name prefixes and suffixes."""
+        patients = []
+
+        # Patient 1: Prof. Albert Einstein
+        p1 = FHIRResourceGenerator.generate_patient(
+            name=[{"family": "Einstein", "given": ["Albert"], "prefix": ["Prof."]}],
+            gender="male",
+            birthDate="1879-03-14"
+        )
+        resp = client.create(p1)
+        patients.append(assertions.assert_created(resp, "Patient"))
+
+        # Patient 2: Dr. Marie Curie, Ph.D.
+        p2 = FHIRResourceGenerator.generate_patient(
+            name=[{"family": "Curie", "given": ["Marie"], "prefix": ["Dr."], "suffix": ["Ph.D."]}],
+            gender="female",
+            birthDate="1867-11-07"
+        )
+        resp = client.create(p2)
+        patients.append(assertions.assert_created(resp, "Patient"))
+
+        # Patient 3: John Smith Jr.
+        p3 = FHIRResourceGenerator.generate_patient(
+            name=[{"family": "Smith", "given": ["John"], "suffix": ["Jr."]}],
+            gender="male",
+            birthDate="1990-01-15"
+        )
+        resp = client.create(p3)
+        patients.append(assertions.assert_created(resp, "Patient"))
+
+        # Patient 4: Pater Ansgar OSB (monk with religious name)
+        p4 = FHIRResourceGenerator.generate_patient(
+            name=[{"family": "Ansgar", "given": ["Pater"], "suffix": ["OSB"]}],
+            gender="male",
+            birthDate="1960-06-01"
+        )
+        resp = client.create(p4)
+        patients.append(assertions.assert_created(resp, "Patient"))
+
+        yield patients
+
+        # Cleanup
+        for patient in patients:
+            try:
+                client.delete("Patient", patient['id'])
+            except:
+                pass  # Best effort cleanup
+
+    def test_search_by_prefix_default(self, client, assertions, prefix_suffix_patients):
+        """Test searching by prefix using default name parameter."""
+        response = client.search("Patient", {"name": "Prof"})
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        # Verify result contains prefix "Prof."
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                if "Prof." in name.get('prefix', []):
+                    found = True
+        assert found, "Should find patient with prefix Prof."
+
+    def test_search_by_prefix_exact(self, client, assertions, prefix_suffix_patients):
+        """Test searching by prefix with exact modifier."""
+        response = client.search("Patient", {"name:exact": "Prof."})
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        # Verify result has exact prefix "Prof."
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                if "Prof." in name.get('prefix', []):
+                    found = True
+        assert found, "Should find patient with exact prefix Prof."
+
+    def test_search_by_prefix_contains(self, client, assertions, prefix_suffix_patients):
+        """Test searching by prefix with contains modifier."""
+        response = client.search("Patient", {"name:contains": "Dr"})
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        # Verify result contains "Dr" in prefix
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                for prefix in name.get('prefix', []):
+                    if "Dr" in prefix:
+                        found = True
+        assert found, "Should find patient with Dr in prefix"
+
+    def test_search_by_suffix_default(self, client, assertions, prefix_suffix_patients):
+        """Test searching by suffix using default name parameter."""
+        response = client.search("Patient", {"name": "Jr"})
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        # Verify result contains suffix "Jr."
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                if "Jr." in name.get('suffix', []):
+                    found = True
+        assert found, "Should find patient with suffix Jr."
+
+    def test_search_by_suffix_exact(self, client, assertions, prefix_suffix_patients):
+        """Test searching by suffix with exact modifier."""
+        response = client.search("Patient", {"name:exact": "OSB"})
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        # Verify result has exact suffix "OSB"
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                if "OSB" in name.get('suffix', []):
+                    found = True
+        assert found, "Should find patient with exact suffix OSB"
+
+    def test_search_by_suffix_contains(self, client, assertions, prefix_suffix_patients):
+        """Test searching by suffix with contains modifier."""
+        response = client.search("Patient", {"name:contains": "Ph.D"})
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        # Verify result contains "Ph.D" in suffix
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                for suffix in name.get('suffix', []):
+                    if "Ph.D" in suffix:
+                        found = True
+        assert found, "Should find patient with Ph.D in suffix"
+
+    def test_search_by_religious_suffix(self, client, assertions, prefix_suffix_patients):
+        """Test searching for religious title suffix (OSB)."""
+        response = client.search("Patient", {"name": "Pater"})
+
+        bundle = assertions.assert_bundle(response, "Patient")
+        assert bundle['total'] >= 1
+
+        # Verify we find the monk
+        found = False
+        for entry in bundle.get('entry', []):
+            patient = entry['resource']
+            for name in patient.get('name', []):
+                if "Pater" in name.get('given', []):
+                    found = True
+        assert found, "Should find Pater Ansgar"
+
+
 class TestResultControl:
     """Test result control parameters (_count, _sort, etc.)."""
 

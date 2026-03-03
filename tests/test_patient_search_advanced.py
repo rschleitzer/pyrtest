@@ -153,8 +153,10 @@ class TestReferenceSearch:
         patient_with_gp_id = missing_test_data['patients_with_gp'][0]['id']
 
         # Test :missing=true - should find patient WITHOUT general practitioner
+        # Also filter by family name to avoid pagination issues with many patients
         response = client.search("Patient", {
-            "general-practitioner:missing": "true"
+            "general-practitioner:missing": "true",
+            "family": "NoGP"
         })
 
         bundle = assertions.assert_bundle(response, "Patient")
@@ -179,7 +181,8 @@ class TestReferenceSearch:
 
         # Test :missing=false - should find patient WITH general practitioner
         response = client.search("Patient", {
-            "general-practitioner:missing": "false"
+            "general-practitioner:missing": "false",
+            "family": "HasGP"
         })
 
         bundle = assertions.assert_bundle(response, "Patient")

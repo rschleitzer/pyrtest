@@ -332,7 +332,6 @@ class TestReverseChaining:
 class TestMultipleLevelChaining:
     """Test chaining across multiple references."""
 
-    @pytest.mark.xfail(reason="Multi-level chaining (Observation->Patient->Practitioner) not fully supported")
     def test_two_level_chain(self, client, assertions, test_data):
         """Test chaining through two levels of references."""
         # Find observations for patients whose GP has family name "Smith"
@@ -379,7 +378,6 @@ class TestChainingWithOtherParameters:
         bundle = assertions.assert_bundle(response, "Observation")
         # Should find observations matching both criteria
 
-    @pytest.mark.xfail(reason="Multi-level chaining (Observation->Patient->Practitioner) not fully supported")
     def test_chain_with_code_filter(self, client, assertions, test_data):
         """Test chaining combined with token parameter."""
         # Find heart rate observations for patients whose GP is Dr. Smith

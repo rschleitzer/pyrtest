@@ -306,9 +306,8 @@ class TestTextSearch:
             "_text": "patient"
         })
 
-        bundle = assertions.assert_bundle(response, "Patient")
-        # Server may or may not support _text
-        # Just verify we get a valid bundle response
+        # A server need not support _text: a Bundle, or 400 with an OperationOutcome
+        assertions.assert_bundle_or_unsupported(response, "Patient")
 
     def test_content_search_parameter(self, client, assertions):
         """Test _content parameter for full resource content search."""
@@ -317,9 +316,8 @@ class TestTextSearch:
             "_content": "Smith"
         })
 
-        bundle = assertions.assert_bundle(response, "Patient")
-        # Server may or may not support _content
-        # Just verify we get a valid bundle response
+        # A server need not support _content: a Bundle, or 400 with an OperationOutcome
+        assertions.assert_bundle_or_unsupported(response, "Patient")
 
     def test_filter_parameter(self, client, assertions):
         """Test _filter parameter for advanced filtering."""
@@ -328,9 +326,8 @@ class TestTextSearch:
             "_filter": "family eq 'Smith'"
         })
 
-        bundle = assertions.assert_bundle(response, "Patient")
-        # Server may or may not support _filter
-        # Just verify we get a valid bundle response
+        # A server need not support _filter: a Bundle, or 400 with an OperationOutcome
+        assertions.assert_bundle_or_unsupported(response, "Patient")
 
 
 class TestCompositeSearch:
@@ -456,59 +453,74 @@ class TestQuantitySearch:
         except:
             pass
 
+    @staticmethod
+    def _found(bundle):
+        """The ids of the matches in a search result."""
+        return {e['resource']['id'] for e in bundle.get('entry', [])
+                if e.get('search', {}).get('mode', 'match') == 'match'}
+
+    def _search(self, client, assertions, test_observations, quantity):
+        """Search this test's observations (60, 75 and 120 /min) by value."""
+        response = client.search("Observation", {
+            "subject": f"Patient/{test_observations['patient']['id']}",
+            "value-quantity": quantity
+        })
+        low, normal, high = (o['id'] for o in test_observations['observations'])
+        return self._found(assertions.assert_bundle(response, "Observation")), low, normal, high
+
     def test_quantity_exact_match(self, client, assertions, test_observations):
         """Test exact quantity match."""
-        response = client.search("Observation", {
-            "value-quantity": "75"
-        })
-
-        bundle = assertions.assert_bundle(response, "Observation")
-        # Should find observation with value 75
+        found, low, normal, high = self._search(client, assertions, test_observations, "75")
+        assert found == {normal}
 
     def test_quantity_greater_than(self, client, assertions, test_observations):
         """Test quantity with gt (greater than) prefix."""
-        response = client.search("Observation", {
-            "value-quantity": "gt100"
-        })
-
-        bundle = assertions.assert_bundle(response, "Observation")
-        # Should find observation with value 120
+        found, low, normal, high = self._search(client, assertions, test_observations, "gt100")
+        assert found == {high}
 
     def test_quantity_less_than(self, client, assertions, test_observations):
         """Test quantity with lt (less than) prefix."""
-        response = client.search("Observation", {
-            "value-quantity": "lt70"
-        })
-
-        bundle = assertions.assert_bundle(response, "Observation")
-        # Should find observation with value 60
+        found, low, normal, high = self._search(client, assertions, test_observations, "lt70")
+        assert found == {low}
 
     def test_quantity_with_system_and_code(self, client, assertions, test_observations):
         """Test quantity with system and code specified."""
-        response = client.search("Observation", {
-            "value-quantity": "75|http://unitsofmeasure.org|/min"
-        })
+        found, low, normal, high = self._search(
+            client, assertions, test_observations, "75|http://unitsofmeasure.org|/min")
+        assert found == {normal}
 
-        bundle = assertions.assert_bundle(response, "Observation")
-        # Should find observation with matching value, system, and code
+    def test_quantity_with_another_code(self, client, assertions, test_observations):
+        """A value that matches under a code that does not is no match."""
+        found, low, normal, high = self._search(
+            client, assertions, test_observations, "75|http://unitsofmeasure.org|kg")
+        assert found == set()
+
+    def test_quantity_with_code_alone(self, client, assertions, test_observations):
+        """Without a system the code or the unit may match."""
+        found, low, normal, high = self._search(client, assertions, test_observations, "75||/min")
+        assert found == {normal}
+        found, low, normal, high = self._search(client, assertions, test_observations, "75||beats/minute")
+        assert found == {normal}
 
     def test_quantity_approximate(self, client, assertions, test_observations):
-        """Test quantity with ap (approximate) prefix."""
-        response = client.search("Observation", {
-            "value-quantity": "ap75"
-        })
-
-        bundle = assertions.assert_bundle(response, "Observation")
-        # Should find observations with values approximately 75 (within 10%)
+        """Test quantity with ap (approximate) prefix: within a tenth of the value."""
+        found, low, normal, high = self._search(client, assertions, test_observations, "ap70")
+        assert found == {normal}
 
     def test_quantity_range(self, client, assertions, test_observations):
         """Test quantity range using multiple parameters."""
-        response = client.search("Observation", {
-            "value-quantity": ["ge70", "le80"]
-        })
+        found, low, normal, high = self._search(client, assertions, test_observations, ["ge70", "le80"])
+        assert found == {normal}
 
-        bundle = assertions.assert_bundle(response, "Observation")
-        # Should find observation with value 75
+    def test_quantity_alternatives(self, client, assertions, test_observations):
+        """Values separated by a comma are alternatives."""
+        found, low, normal, high = self._search(client, assertions, test_observations, "60,120")
+        assert found == {low, high}
+
+    def test_quantity_invalid(self, client, assertions, test_observations):
+        """A value that is no quantity is refused."""
+        response = client.search("Observation", {"value-quantity": "seventy"})
+        assert response.status_code == 400
 
 
 class TestURISearch:

@@ -98,6 +98,23 @@ class FHIRAssertions:
         return bundle
 
     @staticmethod
+    def assert_bundle_or_unsupported(response: requests.Response, resource_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Assert the answer to a search parameter a server need not support.
+
+        A server that supports the parameter answers a Bundle. One that does
+        not may ignore it (a Bundle again) or refuse the search with 400 and
+        an OperationOutcome; both are within the specification. Returns the
+        Bundle, or None when the parameter was refused.
+        """
+        if response.status_code == 400:
+            outcome = response.json()
+            assert outcome.get('resourceType') == 'OperationOutcome', \
+                f"Expected OperationOutcome with 400, got {outcome.get('resourceType')}"
+            assert outcome.get('issue'), "OperationOutcome has no issue"
+            return None
+        return FHIRAssertions.assert_bundle(response, resource_type)
+
+    @staticmethod
     def assert_bundle_count(bundle: Dict[str, Any], expected_count: int):
         """Assert Bundle has expected number of entries."""
         actual = len(bundle.get('entry', []))
